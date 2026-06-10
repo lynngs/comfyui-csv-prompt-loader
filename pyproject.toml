@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-csv-prompt-loader"
+description = "A ComfyUI node that loads prompts one at a time from a CSV file, with auto-incrementing or fixed-index selection. Built for the Finance YouTube Bot pipeline."
+version = "1.0.0"
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/lynngs/comfyui-csv-prompt-loader"
+
+[tool.comfy]
+PublisherId = "lynngs"
+DisplayName = "CSV Prompt Loader"
+Repository = "https://github.com/lynngs/comfyui-csv-prompt-loader"
