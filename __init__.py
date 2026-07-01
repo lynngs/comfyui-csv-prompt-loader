@@ -6,23 +6,32 @@ node without any secondary import step. The old two-file layout
 (__init__.py -> nodes.py via importlib) is collapsed here to remove every
 possible failure point in the import chain. nodes.py is kept in the repo for
 reference but is no longer imported.
+
+CSV layout expected (no header row):
+    column 1  ->  output filename  (used to name the saved image)
+    column 2  ->  the prompt text  (fed to the sampler / CLIP encode)
+Any further columns are ignored.
 """
 
 import csv
 import json
+import re
 from pathlib import Path
 
 
 class CSVPromptLoader:
     """
-    Reads prompts one at a time from a single CSV file in a designated folder.
-    Switch csv_filename between part1/part2/part3 manually between sessions.
-    Check the total_prompts output to know how many times to queue.
+    Reads one row at a time from a CSV file in a designated folder and returns
+    the prompt (column 2) plus a sanitized filename (column 1).
 
-    Designed for the Finance YouTube Bot 3-part CSV output:
-      csv_prompts/prompts_YYYY-MM-DD_part1.csv  (80 prompts)
-      csv_prompts/prompts_YYYY-MM-DD_part2.csv  (80 prompts)
-      csv_prompts/prompts_YYYY-MM-DD_part3.csv  (90 prompts)
+    Wire the outputs like this:
+      - prompt   -> the workflow's prompt / text input
+      - filename -> the Save Image node's filename_prefix
+                    (right-click the Save Image node -> "Convert filename_prefix
+                    to input", then connect this output to it)
+
+    In auto_increment mode each queue run advances to the next row and remembers
+    its position between runs. Check total_rows to know how many times to queue.
     """
 
     @classmethod
@@ -30,7 +39,7 @@ class CSVPromptLoader:
         return {
             "required": {
                 "csv_folder":    ("STRING",  {"default": "csv_prompts", "multiline": False}),
-                "csv_filename":  ("STRING",  {"default": "part1.csv",   "multiline": False}),
+                "csv_filename":  ("STRING",  {"default": "prompts.csv", "multiline": False}),
                 "mode":          (["auto_increment", "fixed_index"],),
                 "fixed_index":   ("INT",     {"default": 0, "min": 0, "max": 99999}),
                 "reset_to_zero": ("BOOLEAN", {"default": False}),
@@ -38,42 +47,34 @@ class CSVPromptLoader:
         }
 
     RETURN_TYPES  = ("STRING", "STRING", "INT", "INT")
-    RETURN_NAMES  = ("positive_prompt", "negative_prompt", "current_index", "total_prompts")
+    RETURN_NAMES  = ("prompt", "filename", "current_index", "total_rows")
     FUNCTION      = "load_prompt"
     CATEGORY      = "Finance YouTube Bot"
 
     def load_prompt(self, csv_folder, csv_filename, mode, fixed_index, reset_to_zero):
         folder   = self._resolve_folder(csv_folder)
         csv_path = folder / csv_filename
-        prompts  = self._read_prompts(csv_path)
+        rows     = self._read_rows(csv_path)
 
-        if not prompts:
-            msg = f"No prompts found in: {csv_path}"
-            return (msg, "", 0, 0)
+        if not rows:
+            msg = f"No rows found in: {csv_path}"
+            return (msg, "csv_error", 0, 0)
 
-        # Per-file state so switching between part1/part2/part3 preserves each counter
+        # Per-file state so switching between CSV files preserves each counter
         state_path = folder / f".state_{csv_filename}.json"
 
         if mode == "fixed_index":
-            idx = fixed_index % len(prompts)
+            idx = fixed_index % len(rows)
         else:                                        # auto_increment
             if reset_to_zero:
                 idx = 0
             else:
-                idx = self._read_state(state_path)
+                idx = self._read_state(state_path) % len(rows)
             # Save NEXT index so the following queue run advances
-            self._write_state(state_path, (idx + 1) % len(prompts))
+            self._write_state(state_path, (idx + 1) % len(rows))
 
-        raw = prompts[idx]
-
-        # Split positive / negative at the suffix the Finance bot appends
-        if "\nnegative:" in raw:
-            pos, neg = raw.split("\nnegative:", 1)
-            pos, neg = pos.strip(), neg.strip()
-        else:
-            pos, neg = raw.strip(), ""
-
-        return (pos, neg, idx, len(prompts))
+        filename, prompt = rows[idx]
+        return (prompt, filename, idx, len(rows))
 
     @classmethod
     def IS_CHANGED(cls, csv_folder, csv_filename, mode, fixed_index, reset_to_zero):
@@ -94,15 +95,35 @@ class CSVPromptLoader:
         resolved.mkdir(parents=True, exist_ok=True)
         return resolved
 
-    def _read_prompts(self, csv_path: Path) -> list:
+    def _read_rows(self, csv_path: Path) -> list:
+        """Return a list of (filename, prompt) tuples. No header row assumed."""
         if not csv_path.exists():
             return []
-        prompts = []
-        with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        rows = []
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
             for row in csv.reader(f):
-                if row and row[0].strip():
-                    prompts.append(row[0].strip())
-        return prompts
+                # Need at least a prompt column; skip fully blank lines
+                if not row or not any(cell.strip() for cell in row):
+                    continue
+                filename = row[0].strip() if len(row) >= 1 else ""
+                prompt   = row[1].strip() if len(row) >= 2 else ""
+                if not prompt:
+                    continue
+                rows.append((self._safe_filename(filename), prompt))
+        return rows
+
+    @staticmethod
+    def _safe_filename(name: str) -> str:
+        """Strip characters that are illegal in filenames on Windows/Linux."""
+        name = name.strip()
+        if not name:
+            return "output"
+        # Drop any extension the CSV might include; Save Image adds its own
+        name = re.sub(r"\.(png|jpg|jpeg|webp)$", "", name, flags=re.IGNORECASE)
+        # Replace path separators and reserved characters with underscore
+        name = re.sub(r'[\\/:*?"<>|]+', "_", name)
+        name = name.strip(". ")
+        return name or "output"
 
     def _read_state(self, path: Path) -> int:
         try:
