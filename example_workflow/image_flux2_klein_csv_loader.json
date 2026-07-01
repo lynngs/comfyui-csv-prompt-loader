@@ -1,8 +1,8 @@
 {
   "id": "92112d97-bb64-4b44-86f2-ea5691ef8f6e",
   "revision": 0,
-  "last_node_id": 132,
-  "last_link_id": 217,
+  "last_node_id": 133,
+  "last_link_id": 218,
   "nodes": [
     {
       "id": 9,
@@ -513,7 +513,7 @@
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 217
+          "link": 218
         },
         {
           "name": "filename",
@@ -531,6 +531,46 @@
       "widgets_values": [
         "",
         true
+      ]
+    },
+    {
+      "id": 133,
+      "type": "ImageScaleBy",
+      "pos": [
+        1014.0,
+        700.0
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 217
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            218
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.8.2",
+        "Node name for S&R": "ImageScaleBy"
+      },
+      "widgets_values": [
+        "lanczos",
+        2.0
       ]
     }
   ],
@@ -586,6 +626,14 @@
     [
       217,
       75,
+      0,
+      133,
+      0,
+      "IMAGE"
+    ],
+    [
+      218,
+      133,
       0,
       132,
       0,
