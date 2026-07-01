@@ -135,7 +135,85 @@ class CSVPromptLoader:
         path.write_text(json.dumps({"idx": idx}))
 
 
-NODE_CLASS_MAPPINGS        = {"CSVPromptLoader": CSVPromptLoader}
-NODE_DISPLAY_NAME_MAPPINGS = {"CSVPromptLoader": "CSV Prompt Loader"}
+class SaveImageCSVFilename:
+    """
+    Saves images using an EXACT filename supplied on the `filename` input, with
+    no auto-appended counter. Feed the CSVPromptLoader's `filename` output here.
+
+    - Single image  -> <filename>.png
+    - Batch of N     -> <filename>_01.png ... (suffix only added when N > 1)
+    Existing files with the same name are overwritten (filenames come from your
+    CSV column 1, so keep them unique). Files are always written inside the
+    ComfyUI output directory (path separators in the name are stripped).
+    """
+
+    def __init__(self):
+        import folder_paths
+        self.output_dir = folder_paths.get_output_directory()
+        self.type = "output"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "images":   ("IMAGE",),
+                "filename": ("STRING", {"default": "output", "forceInput": True}),
+            },
+            "optional": {
+                "subfolder":     ("STRING",  {"default": "", "multiline": False}),
+                "save_metadata": ("BOOLEAN", {"default": True}),
+            },
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
+        }
+
+    RETURN_TYPES = ()
+    FUNCTION     = "save_images"
+    OUTPUT_NODE  = True
+    CATEGORY     = "Finance YouTube Bot"
+
+    def save_images(self, images, filename, subfolder="", save_metadata=True,
+                    prompt=None, extra_pnginfo=None):
+        import os
+        import json
+        import numpy as np
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        base = CSVPromptLoader._safe_filename(filename)
+        sub  = re.sub(r'[\\/:*?"<>|]+', "_", subfolder.strip()).strip("/ ")
+
+        out_folder = os.path.join(self.output_dir, sub) if sub else self.output_dir
+        os.makedirs(out_folder, exist_ok=True)
+
+        batch = len(images)
+        results = []
+        for idx, image in enumerate(images):
+            arr = 255.0 * image.cpu().numpy()
+            img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+
+            metadata = None
+            if save_metadata:
+                metadata = PngInfo()
+                if prompt is not None:
+                    metadata.add_text("prompt", json.dumps(prompt))
+                if extra_pnginfo is not None:
+                    for key, val in extra_pnginfo.items():
+                        metadata.add_text(key, json.dumps(val))
+
+            name = f"{base}.png" if batch == 1 else f"{base}_{idx + 1:02d}.png"
+            img.save(os.path.join(out_folder, name), pnginfo=metadata, compress_level=4)
+            results.append({"filename": name, "subfolder": sub, "type": self.type})
+
+        return {"ui": {"images": results}}
+
+
+NODE_CLASS_MAPPINGS = {
+    "CSVPromptLoader":     CSVPromptLoader,
+    "SaveImageCSVFilename": SaveImageCSVFilename,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "CSVPromptLoader":      "CSV Prompt Loader",
+    "SaveImageCSVFilename": "Save Image (CSV filename)",
+}
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
