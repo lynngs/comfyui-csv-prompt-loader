@@ -52,13 +52,29 @@ class CSVPromptLoader:
     CATEGORY      = "Finance YouTube Bot"
 
     def load_prompt(self, csv_folder, csv_filename, mode, fixed_index, reset_to_zero):
+        csv_folder   = (csv_folder or "").strip().strip('"').strip("'")
+        csv_filename = (csv_filename or "").strip().strip('"').strip("'")
+
         folder   = self._resolve_folder(csv_folder)
         csv_path = folder / csv_filename
         rows     = self._read_rows(csv_path)
 
         if not rows:
-            msg = f"No rows found in: {csv_path}"
-            return (msg, "csv_error", 0, 0)
+            # Fail loudly so a wrong path/empty file is obvious in the ComfyUI UI,
+            # instead of silently feeding an error string into the sampler (which
+            # in an image-edit graph just reconstructs the input image).
+            comfyui_root = Path(__file__).parent.parent.parent
+            raise RuntimeError(
+                f"CSV Prompt Loader found no usable rows.\n"
+                f"  Looked for file: {csv_path}\n"
+                f"  File exists: {csv_path.exists()}\n"
+                f"  csv_folder given: {csv_folder!r}\n"
+                f"  ComfyUI root detected as: {comfyui_root}\n"
+                f"Fix: set csv_folder to the ABSOLUTE path of the folder holding "
+                f"your CSV (must start with '/'), e.g. '/workspace/ComfyUI/csv_prompts', "
+                f"and make sure '{csv_filename}' is inside it with at least one row "
+                f"(column1=filename, column2=prompt)."
+            )
 
         # Per-file state so switching between CSV files preserves each counter
         state_path = folder / f".state_{csv_filename}.json"
@@ -86,14 +102,22 @@ class CSVPromptLoader:
     # ------------------------------------------------------------------ #
 
     def _resolve_folder(self, folder_name: str) -> Path:
+        """
+        Return the first candidate folder that actually exists. Does NOT create
+        folders (auto-creating an empty dir would hide a wrong-path mistake).
+        Absolute paths are used as-is; relative paths are tried against the
+        ComfyUI root first, then the current working directory.
+        """
         p = Path(folder_name)
-        if p.is_absolute() and p.exists():
+        if p.is_absolute():
             return p
-        # Walk up two levels: custom_nodes/<package>/__init__.py -> ComfyUI root
+
         comfyui_root = Path(__file__).parent.parent.parent
-        resolved = comfyui_root / folder_name
-        resolved.mkdir(parents=True, exist_ok=True)
-        return resolved
+        for candidate in (comfyui_root / folder_name, Path.cwd() / folder_name, p):
+            if candidate.exists():
+                return candidate
+        # Nothing exists yet: return the ComfyUI-root guess for a clear error message
+        return comfyui_root / folder_name
 
     def _read_rows(self, csv_path: Path) -> list:
         """Return a list of (filename, prompt) tuples. No header row assumed."""
