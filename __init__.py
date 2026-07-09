@@ -25,10 +25,9 @@ class CSVPromptLoader:
     the prompt (column 2) plus a sanitized filename (column 1).
 
     Wire the outputs like this:
-      - prompt   -> the workflow's prompt / text input
-      - filename -> the Save Image node's filename_prefix
-                    (right-click the Save Image node -> "Convert filename_prefix
-                    to input", then connect this output to it)
+      - prompt          -> the workflow's positive prompt / text input
+      - negative_prompt -> the workflow's negative prompt input (column 3 / C)
+      - filename        -> the Save Image node's filename input
 
     In auto_increment mode each queue run advances to the next row and remembers
     its position between runs. Check total_rows to know how many times to queue.
@@ -46,8 +45,8 @@ class CSVPromptLoader:
             }
         }
 
-    RETURN_TYPES  = ("STRING", "STRING", "INT", "INT")
-    RETURN_NAMES  = ("prompt", "filename", "current_index", "total_rows")
+    RETURN_TYPES  = ("STRING", "STRING", "STRING", "INT", "INT")
+    RETURN_NAMES  = ("prompt", "negative_prompt", "filename", "current_index", "total_rows")
     FUNCTION      = "load_prompt"
     CATEGORY      = "Finance YouTube Bot"
 
@@ -89,8 +88,8 @@ class CSVPromptLoader:
             # Save NEXT index so the following queue run advances
             self._write_state(state_path, (idx + 1) % len(rows))
 
-        filename, prompt = rows[idx]
-        return (prompt, filename, idx, len(rows))
+        filename, prompt, negative = rows[idx]
+        return (prompt, negative, filename, idx, len(rows))
 
     @classmethod
     def IS_CHANGED(cls, csv_folder, csv_filename, mode, fixed_index, reset_to_zero):
@@ -120,7 +119,12 @@ class CSVPromptLoader:
         return comfyui_root / folder_name
 
     def _read_rows(self, csv_path: Path) -> list:
-        """Return a list of (filename, prompt) tuples. No header row assumed."""
+        """
+        Return a list of (filename, prompt, negative) tuples. No header row.
+          column 1 (A) -> filename
+          column 2 (B) -> positive prompt
+          column 3 (C) -> negative prompt (optional; "" if absent)
+        """
         if not csv_path.exists():
             return []
         rows = []
@@ -131,9 +135,10 @@ class CSVPromptLoader:
                     continue
                 filename = row[0].strip() if len(row) >= 1 else ""
                 prompt   = row[1].strip() if len(row) >= 2 else ""
+                negative = row[2].strip() if len(row) >= 3 else ""
                 if not prompt:
                     continue
-                rows.append((self._safe_filename(filename), prompt))
+                rows.append((self._safe_filename(filename), prompt, negative))
         return rows
 
     @staticmethod

@@ -36,15 +36,19 @@ Clone (or copy) this folder into `ComfyUI/custom_nodes/` and restart ComfyUI.
 
 ## CSV format
 
-No header row. **Column 1 = output filename, Column 2 = prompt.** Any further
-columns are ignored. Standard CSV quoting applies, so prompts containing commas
-must be wrapped in double quotes.
+No header row. **Column 1 (A) = output filename, Column 2 (B) = positive prompt,
+Column 3 (C) = negative prompt (optional).** Any further columns are ignored.
+Standard CSV quoting applies, so prompts containing commas must be wrapped in
+double quotes.
 
 ```csv
-market_scene,"A stick figure at a busy market stall, teal glasses, orange dress"
-courtroom_shield,"Stick figure in a courtroom holding a large shield emblem"
+market_scene,"A stick figure at a busy market stall, teal glasses, orange dress","blurry, watermark, extra limbs"
+courtroom_shield,"Stick figure in a courtroom holding a large shield emblem","low quality, text"
 office_desk,"Stick figure sitting at a desk reviewing documents"
 ```
+
+The negative column is optional — leave it off (like the last row above) and the
+`negative_prompt` output is just an empty string.
 
 Place the file inside a folder at the ComfyUI root, e.g.
 `ComfyUI/csv_prompts/prompts.csv`.
@@ -71,8 +75,9 @@ replaced with `_`. So `street/market:scene.png` becomes `street_market_scene`.
 
 | Output | Description |
 |---|---|
-| `prompt` | Column 2 of the current row. |
-| `filename` | Column 1 of the current row, sanitized. |
+| `prompt` | Column 2 (B) of the current row — the positive prompt. |
+| `negative_prompt` | Column 3 (C) of the current row — the negative prompt ("" if absent). |
+| `filename` | Column 1 (A) of the current row, sanitized. |
 | `current_index` | The row number just read (0-based). |
 | `total_rows` | Number of usable rows — tells you how many times to queue. |
 
