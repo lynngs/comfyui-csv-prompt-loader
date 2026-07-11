@@ -89,6 +89,18 @@ class CSVPromptLoader:
             self._write_state(state_path, (idx + 1) % len(rows))
 
         filename, prompt, negative = rows[idx]
+
+        # Log to the ComfyUI server console so you can confirm exactly what was
+        # read from the CSV each run (the node UI boxes show saved widget text,
+        # not the live value flowing through the links).
+        preview = (prompt[:60] + "...") if len(prompt) > 60 else prompt
+        print(
+            f"[CSVPromptLoader] row {idx + 1}/{len(rows)} | file={filename!r} | "
+            f"positive[{len(prompt)} chars]={preview!r} | "
+            f"negative[{len(negative)} chars]={negative!r}",
+            flush=True,
+        )
+
         return (prompt, negative, filename, idx, len(rows))
 
     @classmethod
